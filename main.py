@@ -265,6 +265,7 @@ async def connect_and_listen(interval: str, strat) -> None:
 
 def create_model() -> models.LinReg:
     """
+    TODO: Change this to use from joblib import dump!!!!!
     Create and initialize the prediction model from params configuration.
 
     Loads model parameters from the global params dictionary and constructs
@@ -329,16 +330,18 @@ def create_strategy(exchange) -> strategy.BasicTakerStrat:
     model = create_model()
 
     # Define position size per trade (0.0002 BTC)
+    # TODO: Should this be changed?? Why is it specified??
     trade_sz = 0.0002
 
     # Create the lag/feature calculator
+    # TODO: Need to change to include multiple features
     lag = LogReturn()
 
     # Download historical prices to warm up the lag calculator
     # This ensures the first live trade has proper context
-    prices = dl_prices_ts(coin, interval)
-    for _, price in prices:
-        lag.on_tick(float(price))
+    # How many datapoints must it get?
+    prices = hl.dl_last_candles(coin, interval)
+    lag.on_tick(prices)
 
     # Construct the complete strategy with all components
     return strategy.BasicTakerStrat(exchange, coin, model, trade_sz, lag)

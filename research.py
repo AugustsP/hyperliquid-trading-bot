@@ -37,6 +37,7 @@ from datetime import datetime
 
 def create_ar_df(sym: str, interval: str, start: datetime, end: datetime, no_lags: int):
     """
+    TODO: Create more features
     Create an autoregressive (AR) dataframe with lagged price features.
 
     Downloads historical OHLC data and engineers features for time series

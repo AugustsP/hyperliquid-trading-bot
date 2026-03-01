@@ -1,0 +1,11 @@
+services:
+  dev_container:
+    build:
+      context: .
+      dockerfile: ./Dockerfile
+    network_mode: host
+    volumes:
+      - ~/.ssh:/home/ubuntu/.ssh
+      - ../../:/home/ubuntu/git
+      - ~/.bash_history:/home/ubuntu/.bash_history
+    command: sleep infinity

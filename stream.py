@@ -9,6 +9,8 @@ and lagged values, commonly used in financial data analysis.
 from abc import ABC, abstractmethod
 from collections import deque
 from typing import Optional
+import pandas_ta as ta
+import pandas as pd
 
 import numpy as np
 
@@ -113,6 +115,8 @@ class LogReturn(Tick):
     def __init__(self):
         """Initialize the log return calculator with a 2-element price window."""
         # We only need to store the last 2 prices to calculate returns
+        # TODO: We need to store more then 2 to calculate more features
+        # TODO: Will have to create way to fill window when bot starts up. Can't wait 20 hours for it to fill up naturally.
         self.prices = Window(2)
 
     def on_tick(self, px) -> Optional[float]:
@@ -130,9 +134,21 @@ class LogReturn(Tick):
 
         # We need at least 2 prices to calculate a return
         if self.prices.is_full():
+            
+            self.prices.data['sma_20'] = self.prices.data.ta.sma(length=20)
+            self.prices.data['sma_50'] = self.prices.data.ta.sma(length=50)
+
+            self.prices.data['rsi_14'] = self.prices.data.ta.rsi(length=14)
+            self.prices.data.ta.macd(append=True)
+
+            self.prices.data['close_log_return'] = np.log(self.prices.data['close']/self.prices.data['close'].shift())
+            self.prices.data['close_log_return_lag_1'] = self.prices.data['close_log_return'].shift()
+            self.prices.data['close_log_return_lag_2'] = self.prices.data['close_log_return'].shift(2)
+            self.prices.data['close_log_return_lag_3'] = self.prices.data['close_log_return'].shift(3)
             # Calculate log return: ln(current_price / previous_price)
             # prices.data[0] is the older price, prices.data[1] is the newer one
-            return np.log(self.prices.data[1] / self.prices.data[0])
+            # We don't always use all these features, mUst return only last row of window dataframe
+            return self.prices.data[-1]
 
         return None
 

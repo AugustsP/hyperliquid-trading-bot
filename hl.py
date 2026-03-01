@@ -12,6 +12,7 @@ from hyperliquid.info import Info
 import pandas as pd
 
 # The URL for streaming data from the hyperliquid exchange
+# testnet url: https://api.hyperliquid-testnet.xyz
 URL = "wss://api.hyperliquid.xyz/ws"
 
 # The accepted time intervals for the hyperliquid exchange

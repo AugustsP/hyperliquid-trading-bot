@@ -1,0 +1,41 @@
+
+{
+	"name": "hyperliquid-trading-bot",
+	"dockerComposeFile": "./docker-compose.yml",
+	"service": "dev_container",
+	"customizations": {
+		"vscode": {
+			"extensions": [
+				"ms-python.python",
+				"ms-python.pylint",
+				"xyz.local-history",
+				"ms-azuretools.vscode-docker",
+				"streetsidesoftware.code-spell-checker",
+				"charliermarsh.ruff",
+				"Gruntfuggly.todo-tree"
+			],
+			"settings": {
+				"python.testing.pytestEnabled": true,
+				"[python]": {
+					"editor.defaultFormatter": "charliermarsh.ruff"
+				},
+				"todo-tree.highlights.customHighlight": {
+					"TODO": {
+						"icon": "check",
+						"background": "#C70039",
+						"foreground": "#ffffff",
+						"iconColour": "#000000"
+					},
+					"FIXME": {
+						"background": "#C70039",
+						"foreground": "#ffffff",
+						"iconColour": "#000000",
+						"gutterIcon": true
+					}
+				}
+			}
+		}
+	},
+	"shutdownAction": "stopCompose",
+	"remoteUser": "ubuntu",
+	"workspaceFolder": "/home/ubuntu/git/hyperliquid-trading-bot"}
