@@ -209,7 +209,7 @@ class BasicTakerStrat(Tick):
             >>> print(f"Order direction: {'BUY' if replay.is_buy else 'SELL'}")
         """
         print(f'On tick: {px}')
-
+        
         # Calculate feature (e.g., log return) from the new price
         # This might return None if we don't have enough data yet
         lag = self.lag.on_tick(px)

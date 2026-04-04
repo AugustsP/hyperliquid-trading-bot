@@ -234,7 +234,7 @@ async def connect_and_listen(interval: str, strat) -> None:
 
     # Start the background timer task for periodic trading
     timer_task = asyncio.create_task(trade_periodically(interval, strat))
-
+    
     try:
         # Connect to WebSocket with keepalive ping
         async with websockets.connect(hl.URL, ping_interval=20) as ws:
@@ -340,13 +340,14 @@ def create_strategy(exchange) -> strategy.BasicTakerStrat:
     # Download historical prices to warm up the lag calculator
     # This ensures the first live trade has proper context
     # How many datapoints must it get?
+    
     prices = hl.dl_last_candles(coin, interval)
     lag.on_tick(prices)
 
     # Construct the complete strategy with all components
     return strategy.BasicTakerStrat(exchange, coin, model, trade_sz, lag)
 
-
+# TODO: use ccxt
 async def main() -> None:
     """
     Main application entry point.
@@ -385,7 +386,7 @@ async def main() -> None:
     # Load credentials from environment variables
     secret_key = os.environ["HL_SECRET"]
     wallet = os.environ["HL_WALLET"]
-
+    
     # Initialize exchange connection and get client
     address, info, exchange = hl.init(secret_key, wallet)
 

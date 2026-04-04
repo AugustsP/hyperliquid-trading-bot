@@ -117,7 +117,7 @@ class LogReturn(Tick):
         # We only need to store the last 2 prices to calculate returns
         # TODO: We need to store more then 2 to calculate more features
         # TODO: Will have to create way to fill window when bot starts up. Can't wait 20 hours for it to fill up naturally.
-        self.prices = Window(2)
+        self.prices = Window(50)
 
     def on_tick(self, px) -> Optional[float]:
         """
@@ -131,24 +131,42 @@ class LogReturn(Tick):
         """
         # Add the new price to our window
         self.prices.on_tick(px)
-
+        breakpoint()
         # We need at least 2 prices to calculate a return
-        if self.prices.is_full():
+        if not self.prices.is_full():
             
-            self.prices.data['sma_20'] = self.prices.data.ta.sma(length=20)
-            self.prices.data['sma_50'] = self.prices.data.ta.sma(length=50)
+            df = pd.DataFrame(self.prices.data[0])
+            df['t'] = pd.to_datetime(df['t'], unit='ms')
+            df['T'] = pd.to_datetime(df['T'], unit='ms')
+            for col in ['o','h','l','c']:
+                df[col] = df[col].astype(float)
+                
+            df = df.rename(columns={
+                't': 'open_time',
+                'T': 'close_time',
+                'o': 'open',
+                'h': 'high',
+                'l': 'low',
+                'c': 'close',
+                'v': 'volume',
+            })
+            
+            
+            
+            df['sma_20'] = df.ta.sma(length=20)
+            df['sma_50'] = df.ta.sma(length=50)
 
-            self.prices.data['rsi_14'] = self.prices.data.ta.rsi(length=14)
-            self.prices.data.ta.macd(append=True)
+            df['rsi_14'] = df.ta.rsi(length=14)
+            df.ta.macd(append=True)
 
-            self.prices.data['close_log_return'] = np.log(self.prices.data['close']/self.prices.data['close'].shift())
-            self.prices.data['close_log_return_lag_1'] = self.prices.data['close_log_return'].shift()
-            self.prices.data['close_log_return_lag_2'] = self.prices.data['close_log_return'].shift(2)
-            self.prices.data['close_log_return_lag_3'] = self.prices.data['close_log_return'].shift(3)
+            df['close_log_return'] = np.log(df['close']/df['close'].shift())
+            df['close_log_return_lag_1'] = df['close_log_return'].shift()
+            df['close_log_return_lag_2'] = df['close_log_return'].shift(2)
+            df['close_log_return_lag_3'] = df['close_log_return'].shift(3)
             # Calculate log return: ln(current_price / previous_price)
-            # prices.data[0] is the older price, prices.data[1] is the newer one
-            # We don't always use all these features, mUst return only last row of window dataframe
-            return self.prices.data[-1]
+            # df is the older price, self.prices.data[1] is the newer one
+            # We don't always use all these features, must return only last row of window dataframe
+            return df.iloc[-1]
 
         return None
 

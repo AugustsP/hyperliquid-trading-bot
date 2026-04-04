@@ -1,5 +1,7 @@
 services:
   dev_container:
+    env_file:
+        - .env
     build:
       context: .
       dockerfile: ./Dockerfile

@@ -12,8 +12,8 @@ from hyperliquid.info import Info
 import pandas as pd
 
 # The URL for streaming data from the hyperliquid exchange
-# testnet url: https://api.hyperliquid-testnet.xyz
-URL = "wss://api.hyperliquid.xyz/ws"
+# testnet url: wss://api.hyperliquid-testnet.xyz/ws
+URL = "wss://api.hyperliquid-testnet.xyz/ws" #"wss://api.hyperliquid.xyz/ws"
 
 # The accepted time intervals for the hyperliquid exchange
 TIME_INTERVALS = ("1m", "3m", "5m", "15m", "30m", "1h", "2h", "4h", "8h", "12h", "1d", "3d", "1w", "1M")
@@ -57,7 +57,7 @@ def dl_ohlc(sym: str, interval: str, start: datetime, end: datetime) -> List[Dic
     """
     end_time_ms = int(end.timestamp() * 1000)
     start_time_ms = int(start.timestamp() * 1000)
-
+    
     resp = requests.post(
         "https://api.hyperliquid.xyz/info",
         headers={"Content-Type": "application/json"},
@@ -103,15 +103,26 @@ def dl_ohlc_df(sym, interval, start: datetime, end: datetime) -> pd.DataFrame:
         ValueError: If price columns cannot be converted to float.
         KeyError: If expected columns are missing from the API response.
     """
+    
     df = pd.DataFrame(dl_ohlc(sym, interval, start, end))
     df['t'] = pd.to_datetime(df['t'], unit='ms')
     df['T'] = pd.to_datetime(df['T'], unit='ms')
     for col in ['o','h','l','c']:
         df[col] = df[col].astype(float)
+        
+    df = df.rename(columns={
+        't': 'open_time',
+        'T': 'close_time',
+        'o': 'open',
+        'h': 'high',
+        'l': 'low',
+        'c': 'close',
+        'v': 'volume',
+    })
     return df
 
 
-def dl_last_candles(sym: str, interval: str, no_lags: int = 5):
+def dl_last_candles(sym: str, interval: str, no_lags: int = 50):
     """
     Download the most recent candlestick data for a given symbol.
 
