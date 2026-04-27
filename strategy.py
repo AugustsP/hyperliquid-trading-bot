@@ -98,7 +98,9 @@ class BasicTakerStrat(Tick):
             model,
             sz: float,
             lag,
-            leverage: float = 1.0
+            leverage: float = 1.0,
+            stop_loss_pct: float = 2.0,
+            account_risk_pct: float = 1.0
     ):
         """
         Initialize the trading strategy.
@@ -110,6 +112,8 @@ class BasicTakerStrat(Tick):
             sz: Position size for each trade
             lag: Feature calculator (e.g., LogReturn instance) with on_tick() method
             leverage: Leverage multiplier (default 1.0 = no leverage)
+            stop_loss_pct: Stop loss percentage (default 2.0 = 2%)
+            account_risk_pct: Maximum risk per trade as % of account (default 1.0 = 1%)
         """
         self.exchange = exchange
         self.coin = coin
@@ -117,6 +121,13 @@ class BasicTakerStrat(Tick):
         self.lag = lag
         self.sz = sz
         self.leverage = leverage
+        self.stop_loss_pct = stop_loss_pct
+        self.account_risk_pct = account_risk_pct
+        
+        # Track position state for stop loss
+        self.entry_price = None
+        self.is_long = None
+        self.in_position = False
 
     def predict(self, px) -> float:
         """
@@ -128,7 +139,32 @@ class BasicTakerStrat(Tick):
         Returns:
             Model prediction (typically forecasted return)
         """
+        
         return self.model.predict(px)
+
+    def check_stop_loss(self, current_price: float) -> bool:
+        """
+        Check if the current position has hit the stop loss level.
+
+        Args:
+            current_price: Current market price
+
+        Returns:
+            True if stop loss is triggered, False otherwise
+        """
+        if not self.in_position or self.entry_price is None:
+            return False
+
+        # Calculate loss percentage
+        if self.is_long:
+            loss_pct = ((float(self.entry_price['c']) - float(current_price['c'])) / float(self.entry_price['c'])) * 100
+        else:
+            loss_pct = ((float(current_price['c']) - float(self.entry_price['c'])) / float(self.entry_price['c'])) * 100
+
+        should_stop = loss_pct >= self.stop_loss_pct
+        if should_stop:
+            print(f'Stop loss check: entry={self.entry_price}, current={current_price}, loss={loss_pct:.2f}% (threshold={self.stop_loss_pct}%)')
+        return should_stop
 
     def strategy(self, y_hat: float) -> Order:
         """
@@ -145,11 +181,12 @@ class BasicTakerStrat(Tick):
             Order object specifying the trade to execute
         """
         # Determine direction: positive prediction means buy, negative means sell
+        
         is_buy = np.sign(y_hat) == 1
 
         return Order(self.coin, self.sz, is_buy)
 
-    def execute(self, order: Order) -> None:
+    def execute(self, order: Order, current_price: float) -> None:
         """
         Execute a trade on the exchange.
 
@@ -162,17 +199,22 @@ class BasicTakerStrat(Tick):
 
         Args:
             order: The order to execute
+            current_price: Current market price for tracking entry
 
         Note:
             Errors are caught and logged rather than raised to prevent
             strategy crashes during live trading.
         """
         # Step 1: Close any existing position
-        try:
-            r = self.exchange.market_close(self.coin)
-            print(f"Position closed: {r}")
-        except Exception as e:
-            print(f'Error closing position: {e}')
+        if self.in_position:
+            try:
+                r = self.exchange.market_close(self.coin)
+                print(f"Position closed: {r}")
+                self.in_position = False
+                self.entry_price = None
+                self.is_long = None
+            except Exception as e:
+                print(f'Error closing position: {e}')
 
         # Step 2: Open new position with the specified direction and size
         try:
@@ -182,6 +224,10 @@ class BasicTakerStrat(Tick):
                 float(order.sz)
             )
             print(f'Order opened: {r}')
+            # Track entry price and direction for stop loss
+            self.entry_price = current_price
+            self.is_long = order.is_buy
+            self.in_position = True
         except Exception as e:
             print(f'Error opening position: {e}')
 
@@ -190,11 +236,12 @@ class BasicTakerStrat(Tick):
         Process a new price tick and execute the full trading pipeline.
 
         This is the main entry point for streaming data. Each price tick triggers:
-        1. Feature calculation (e.g., log return)
-        2. Model prediction
-        3. Order generation
-        4. Trade execution
-        5. Recording of the tick for analysis
+        1. Check for stop loss on existing position
+        2. Feature calculation (e.g., log return)
+        3. Model prediction
+        4. Order generation
+        5. Trade execution
+        6. Recording of the tick for analysis
 
         Args:
             px: The current market price
@@ -210,9 +257,22 @@ class BasicTakerStrat(Tick):
         """
         print(f'On tick: {px}')
         
+        # Check if stop loss is triggered
+        should_stop = self.check_stop_loss(px)
+        if should_stop:
+            print(f'STOP LOSS TRIGGERED at {px}! Closing position.')
+            try:
+                r = self.exchange.market_close(self.coin)
+                print(f"Position closed due to stop loss: {r}")
+            except Exception as e:
+                print(f'Error closing position on stop loss: {e}')
+            self.entry_price = None
+            self.is_long = None
+            return None
+        
         # Calculate feature (e.g., log return) from the new price
         # This might return None if we don't have enough data yet
-        lag = self.lag.on_tick(px)
+        lag = self.lag.on_tick([px])
         print(f'Calculated log return: {lag}')
 
         # Generate prediction from the model
@@ -225,7 +285,7 @@ class BasicTakerStrat(Tick):
         print(f'Order: {order}')
 
         # Execute the order on the exchange
-        self.execute(order)
+        self.execute(order, px)
 
         # Record all information about this tick for later analysis
         return TickReplay(

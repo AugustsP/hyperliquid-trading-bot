@@ -11,6 +11,8 @@ from collections import deque
 from typing import Optional
 import pandas_ta as ta
 import pandas as pd
+import hl
+from datetime import datetime, timedelta, timezone
 
 import numpy as np
 
@@ -122,7 +124,7 @@ class LogReturn(Tick):
     def on_tick(self, px) -> Optional[float]:
         """
         Process a new price and calculate log return if possible.
-
+]
         Args:
             px: The new price (must be positive)
 
@@ -131,11 +133,18 @@ class LogReturn(Tick):
         """
         # Add the new price to our window
         self.prices.on_tick(px)
-        breakpoint()
-        # We need at least 2 prices to calculate a return
+       
         if not self.prices.is_full():
+            now = datetime.now(timezone.utc)
+            start = now - timedelta(minutes = 30*50) #hardcode for now, need to make more flexible later
+            data = hl.dl_ohlc('BTC', '30m', start, now)
+            for x in data:
+                self.prices.on_tick([x])
+
+        # We need at least 2 prices to calculate a return
+        if self.prices.is_full():
             
-            df = pd.DataFrame(self.prices.data[0])
+            df = pd.concat([pd.DataFrame(i) for i in self.prices.data], ignore_index=True)
             df['t'] = pd.to_datetime(df['t'], unit='ms')
             df['T'] = pd.to_datetime(df['T'], unit='ms')
             for col in ['o','h','l','c']:
@@ -150,11 +159,13 @@ class LogReturn(Tick):
                 'c': 'close',
                 'v': 'volume',
             })
-            
-            
-            
-            df['sma_20'] = df.ta.sma(length=20)
-            df['sma_50'] = df.ta.sma(length=50)
+
+            df['open_time'] = pd.to_datetime(df['open_time'])
+            df = df.drop_duplicates(subset='open_time', keep='last')
+            df = df.drop_duplicates(subset=['open', 'high', 'low', 'close'], keep='last')
+            df = df.set_index('open_time')
+            df['sma_20'] = df['close'].rolling(20).mean()
+            df['sma_50'] = df['close'].rolling(50).mean()
 
             df['rsi_14'] = df.ta.rsi(length=14)
             df.ta.macd(append=True)
@@ -166,7 +177,9 @@ class LogReturn(Tick):
             # Calculate log return: ln(current_price / previous_price)
             # df is the older price, self.prices.data[1] is the newer one
             # We don't always use all these features, must return only last row of window dataframe
-            return df.iloc[-1]
+            df = df[['rsi_14', 'MACDh_12_26_9', 'MACD_12_26_9', 'close_log_return_lag_1', 'close_log_return_lag_2', 'close_log_return_lag_3']]
+            
+            return df.tail(1)
 
         return None
 

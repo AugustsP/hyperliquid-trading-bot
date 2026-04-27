@@ -1,0 +1,8 @@
+# Ignore CSV files
+*.csv
+
+# Ignore .env files
+.env
+
+# Ignore zip files
+*.zip

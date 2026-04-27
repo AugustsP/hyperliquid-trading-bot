@@ -13,7 +13,7 @@ import pandas as pd
 
 # The URL for streaming data from the hyperliquid exchange
 # testnet url: wss://api.hyperliquid-testnet.xyz/ws
-URL = "wss://api.hyperliquid-testnet.xyz/ws" #"wss://api.hyperliquid.xyz/ws"
+URL = "wss://api.hyperliquid.xyz/ws"#"wss://api.hyperliquid-testnet.xyz/ws"# #"wss://api.hyperliquid-testnet.xyz/ws"
 
 # The accepted time intervals for the hyperliquid exchange
 TIME_INTERVALS = ("1m", "3m", "5m", "15m", "30m", "1h", "2h", "4h", "8h", "12h", "1d", "3d", "1w", "1M")
@@ -122,7 +122,7 @@ def dl_ohlc_df(sym, interval, start: datetime, end: datetime) -> pd.DataFrame:
     return df
 
 
-def dl_last_candles(sym: str, interval: str, no_lags: int = 50):
+def dl_last_candles(sym: str, interval: str, no_lags: int = 0):
     """
     Download the most recent candlestick data for a given symbol.
 

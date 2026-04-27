@@ -34,6 +34,7 @@ import websockets
 import json
 import models
 import strategy
+import joblib
 
 from typing import List, Tuple
 from datetime import datetime, timezone
@@ -47,7 +48,7 @@ last_price = None
 # All strategy settings are centralized here for easy modification
 params = {
     'sym': 'BTC',  # Trading symbol
-    'interval': '1m',  # Trading frequency
+    'interval': '30m',  # Trading frequency
     'model': {
         'weight': -0.0001,  # Model coefficient (negative = mean reversion)
         'bias': -0.0000002  # Model intercept
@@ -165,7 +166,7 @@ async def trade_periodically(interval: str, strat) -> None:
     # Convert interval to minutes for timing calculations
     no_mins = interval_mins(interval)
     period_mins = max(1, no_mins)  # Ensure at least 1 minute
-
+    
     while True:
         now = datetime.now(timezone.utc)
 
@@ -234,27 +235,25 @@ async def connect_and_listen(interval: str, strat) -> None:
 
     # Start the background timer task for periodic trading
     timer_task = asyncio.create_task(trade_periodically(interval, strat))
-    
     try:
         # Connect to WebSocket with keepalive ping
         async with websockets.connect(hl.URL, ping_interval=20) as ws:
             print(f"Connected to {strat.coin} stream")
-
             # Subscribe to trade updates for the specified coin
             await ws.send(json.dumps({
                 "method": "subscribe",
-                "subscription": {"type": "trades", "coin": strat.coin}
+                "subscription": {"type": "candle", "coin": strat.coin, "interval": params['interval']}
             }))
 
             # Listen for incoming messages
             async for message in ws:
                 data = json.loads(message)
                 trade_data = data.get("data")
-
+                
                 # Extract the most recent trade price
-                if isinstance(trade_data, list):
-                    last_trade = trade_data[-1]
-                    last_price = float(last_trade['px'])
+                if all(key in trade_data for key in ['t', 'T', 's', 'i', 'o', 'c', 'h', 'l', 'v', 'n']):
+                    last_trade = trade_data#trade_data[-1]
+                    last_price = trade_data#float(last_trade['px'])
                     # Price is stored; periodic task will use it for trading
 
     finally:
@@ -263,7 +262,7 @@ async def connect_and_listen(interval: str, strat) -> None:
         timer_task.cancel()
 
 
-def create_model() -> models.LinReg:
+def create_model():
     """
     TODO: Change this to use from joblib import dump!!!!!
     Create and initialize the prediction model from params configuration.
@@ -292,7 +291,9 @@ def create_model() -> models.LinReg:
     weight = model_params['weight']
     bias = model_params['bias']
 
-    return models.LinReg(weight, bias)
+    model = joblib.load('model.joblib')
+
+    return model
 
 
 def create_strategy(exchange) -> strategy.BasicTakerStrat:
@@ -329,8 +330,8 @@ def create_strategy(exchange) -> strategy.BasicTakerStrat:
     # Create the prediction model
     model = create_model()
 
-    # Define position size per trade (0.0002 BTC)
-    # TODO: Should this be changed?? Why is it specified??
+    # Define position size per trade
+    # 0.0004 BTC = ~$20 at $50k, ~$36 at $90k (ensures > $10 minimum)
     trade_sz = 0.0002
 
     # Create the lag/feature calculator
@@ -342,10 +343,20 @@ def create_strategy(exchange) -> strategy.BasicTakerStrat:
     # How many datapoints must it get?
     
     prices = hl.dl_last_candles(coin, interval)
+
     lag.on_tick(prices)
 
     # Construct the complete strategy with all components
-    return strategy.BasicTakerStrat(exchange, coin, model, trade_sz, lag)
+    # For $100 account: 2% stop loss and 1% risk per trade
+    return strategy.BasicTakerStrat(
+        exchange,
+        coin,
+        model,
+        trade_sz,
+        lag,
+        stop_loss_pct=2.0,
+        account_risk_pct=1.0
+    )
 
 # TODO: use ccxt
 async def main() -> None:
@@ -386,13 +397,11 @@ async def main() -> None:
     # Load credentials from environment variables
     secret_key = os.environ["HL_SECRET"]
     wallet = os.environ["HL_WALLET"]
-    
     # Initialize exchange connection and get client
-    address, info, exchange = hl.init(secret_key, wallet)
-
+    address, info, exchange = hl.init(secret_key, wallet, main_net=True)
+    
     # Create the trading strategy using params configuration
     strat = create_strategy(exchange)
-
     # Validate interval is supported by the exchange
     if interval not in hl.TIME_INTERVALS:
         raise Exception(f"Invalid time interval: {interval}")
